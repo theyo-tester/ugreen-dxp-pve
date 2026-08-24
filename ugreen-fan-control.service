@@ -1,0 +1,13 @@
+[Unit]
+Description=UGREEN NASsync Automatic Fan Control Service
+After=multi-user.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/ugreen-fan-control.env
+ExecStart=/usr/bin/python3 /usr/local/bin/ugreen-fan-control.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
