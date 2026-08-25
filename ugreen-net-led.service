@@ -1,0 +1,13 @@
+[Unit]
+Description=UGREEN Network LED Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ugreen/ugreen-leds.env
+ExecStart=/usr/local/bin/ugreen-net-led.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
