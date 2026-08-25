@@ -6,7 +6,7 @@ A lightweight, native hardware control suite designed for UGREEN NASsync hardwar
 
 ---
 
-## Why a Dedicated Python Script?
+## Why a Dedicated Python Script for Fan Control ?
 
 Native Linux PWM management tools (such as standard `fancontrol` from `lm-sensors`) do not work properly out of the box on the UGREEN DXP4800 motherboard. The hardware requires explicit handling of the Super I/O interface and non-standard sysfs mapping.
 
@@ -24,7 +24,7 @@ To solve this, this repository uses a dedicated Python daemon (`ugreen-fan-contr
 * **HDD Standby Protection**: Checks drive power states before querying via `smartctl` fallback to avoid waking up spun-down disks.
 * **Automatic Hardware Detection**: Auto-detects the active ITE Super I/O PWM control interface (`pwm3`, `pwm2`, or `pwm1`).
 * **Failsafe Mechanism**: Reverts to a safe configurable PWM speed if sensor readings fail or exceptions occur.
-* **LED Control Integration**: Automatically configures and enables front panel LED indicators upon boot.
+* **LED Control Integration**: Automatically configures and enables front panel LED indicators
 
 ---
 
