@@ -47,7 +47,7 @@ This suite compiles, installs, and integrates components from the following proj
 * **[frankcrawford/it87](https://github.com/frankcrawford/it87)**: Active and maintained (last update from  Aug 2026) linux kernel driver for ITE IT87xx Super I/O chips (compiled via DKMS to expose hardware monitoring and PWM control). I saw many repos including their own driver versions, copied from hwmon/it87 project or frankcrawford/it87 and modified a little to fit dxp, but this is not easily maintainable this way! The plain frankcrawford/it87 version works just fine (at least for DXP4800).
 * **[miskcoo/ugreen_leds_controller](https://github.com/miskcoo/ugreen_leds_controller)**: User-space C utility to configure UGREEN NAS LED controllers.
 * **[lpaolini/ugreen-dxp-pve](https://github.com/lpaolini/ugreen-dxp-pve)**: Conceptual foundation for host-based dual fan curve management on UGREEN NAS hardware.
-
+* **[Drauku/ugreen-leds-proxmox](https://github.com/Drauku/ugreen-leds-proxmox/)**: inspiration for HDD LED Controller logic
 ---
 
 ## Installation
