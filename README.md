@@ -44,7 +44,7 @@ To solve this, this repository uses a dedicated Python daemon (`ugreen-fan-contr
 
 This suite compiles, installs, and integrates components from the following projects:
 
-* **[frankcrawford/it87](https://github.com/frankcrawford/it87)**: Linux kernel driver for ITE IT87xx Super I/O chips (compiled via DKMS to expose hardware monitoring and PWM control).
+* **[frankcrawford/it87](https://github.com/frankcrawford/it87)**: Active and maintained (last update from  Aug 2026) linux kernel driver for ITE IT87xx Super I/O chips (compiled via DKMS to expose hardware monitoring and PWM control). I saw many repos including their own driver versions, copied from hwmon/it87 project or frankcrawford/it87 and modified a little to fit dxp, but this is not easily maintainable this way! The plain frankcrawford/it87 version works just fine (at least for DXP4800).
 * **[miskcoo/ugreen_leds_controller](https://github.com/miskcoo/ugreen_leds_controller)**: User-space C utility to configure UGREEN NAS LED controllers.
 * **[lpaolini/ugreen-dxp-pve](https://github.com/lpaolini/ugreen-dxp-pve)**: Conceptual foundation for host-based dual fan curve management on UGREEN NAS hardware.
 
@@ -54,7 +54,7 @@ This suite compiles, installs, and integrates components from the following proj
 
 1. Clone this repository to your Proxmox/Debian host:
    ```bash
-   git clone [https://github.com/your-username/ugreen-dxp-pve.git](https://github.com/your-username/ugreen-dxp-pve.git)
+   git clone https://github.com/theyo-tester/ugreen-dxp-pve.git
    cd ugreen-dxp-pve
    ```
 
