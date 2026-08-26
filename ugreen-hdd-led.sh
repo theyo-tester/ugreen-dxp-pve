@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # UGREEN Multi-Bay HDD & NVMe LED Controller (Hardware Agnostic Auto-Scaling)
+# GitHub-ready standalone daemon for UGREEN NAS hardware running Linux / Proxmox VE
 
 ENV_FILE="/etc/ugreen/ugreen-leds.env"
 if [ -f "$ENV_FILE" ]; then
@@ -17,28 +18,55 @@ POLL_INTERVAL="${POLL_INTERVAL:-5}"
 
 MAX_IDLE_LOOPS=$(( (IDLE_MINUTES * 60) / POLL_INTERVAL ))
 
-# 1. Exit immediately if kernel module/sysfs entries are missing
-MAX_BAYS=$(ls -d /sys/class/leds/ugreen:white:disk* 2>/dev/null | wc -l)
+# 1. Self-contained I2C Probe logic (Generic & Vendor-Independent)
+auto_probe_i2c() {
+    if [ ! -d "/sys/class/leds/disk1" ]; then
+        # Find the I2C bus number corresponding to SMBus / i801 adapter
+        local bus_num=""
+        for adapter in /sys/class/i2c-adapter/i2c-*; do
+            [ -e "$adapter/name" ] || continue
+            if grep -qiE 'smbus|i801' "$adapter/name"; then
+                bus_num=$(basename "$adapter" | sed 's/i2c-//')
+                break
+            fi
+        done
+
+        if [ -n "$bus_num" ] && [ -e "/sys/bus/i2c/devices/i2c-${bus_num}/new_device" ]; then
+            echo "led-ugreen 0x3a" > "/sys/bus/i2c/devices/i2c-${bus_num}/new_device" 2>/dev/null || true
+            sleep 1
+        fi
+    fi
+}
+
+auto_probe_i2c
+
+# 2. Verify sysfs hardware node existence
+MAX_BAYS=$(ls -d /sys/class/leds/disk[0-9]* 2>/dev/null | wc -l)
 if [ "$MAX_BAYS" -eq 0 ]; then
-    echo "Error: No UGREEN disk LEDs found in /sys/class/leds/. Is the driver loaded? Exiting." >&2
+    echo "Error: No UGREEN disk LEDs found under /sys/class/leds/disk*. Is led-ugreen module loaded?" >&2
     exit 1
 fi
 
 set_physical_slot_led() {
     local slot="$1"
-    local color="$2"
+    local color_name="$2"
     local brightness="$3"
 
-    for c in white amber red; do
-        local led_file="/sys/class/leds/ugreen:${c}:disk${slot}/brightness"
-        if [ -f "$led_file" ]; then
-            if [ "$c" = "$color" ]; then
-                echo "$brightness" > "$led_file" 2>/dev/null || true
-            else
-                echo 0 > "$led_file" 2>/dev/null || true
-            fi
-        fi
-    done
+    local led_dir="/sys/class/leds/disk${slot}"
+    if [ -d "$led_dir" ]; then
+        local rgb
+        case "$color_name" in
+            white) rgb="255 255 255" ;;
+            amber) rgb="255 60 0" ;;
+            red)   rgb="255 0 0" ;;
+            blue)  rgb="0 0 255" ;;
+            off)   rgb="0 0 0" ;;
+            *)     rgb="$color_name" ;;
+        esac
+
+        echo "$rgb" > "${led_dir}/color" 2>/dev/null || true
+        echo "$brightness" > "${led_dir}/brightness" 2>/dev/null || true
+    fi
 }
 
 get_physical_slot() {
@@ -107,7 +135,7 @@ while true; do
     declare -A SLOT_BRIGHTNESS
     declare -A SLOT_PRIORITY
 
-    # Reset physical slots to baseline idle state
+    # Baseline Status
     for s in $(seq 1 "$MAX_BAYS"); do
         SLOT_COLOR[$s]="$HDD_COLOR"
         SLOT_BRIGHTNESS[$s]="$BRIGHTNESS_SLEEP"

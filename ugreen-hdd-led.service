@@ -1,11 +1,9 @@
 [Unit]
-Description=UGREEN HDD LED Controller
-After=multi-user.target
-ConditionPathExists=/sys/class/leds/ugreen:white:disk1/brightness
+Description=UGREEN Multi-Bay HDD & NVMe LED Controller
+After=syslog.target network.target local-fs.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/ugreen/ugreen-leds.env
 ExecStart=/usr/local/bin/ugreen-hdd-led.sh
 Restart=always
 RestartSec=5
