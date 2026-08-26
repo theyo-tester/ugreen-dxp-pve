@@ -1,43 +1,48 @@
 #!/usr/bin/env bash
-# UGREEN Network LED Daemon with Multi-NIC Support
+# UGREEN Network LED Setup (Kernel-Triggered with Centralized Color Parsing)
+set -e
 
-ENV_FILE="/etc/ugreen/ugreen-leds.env"
-if [ -f "$ENV_FILE" ]; then
-    source "$ENV_FILE"
-fi
-
-NET_INTERFACES="${NET_INTERFACES:-auto}"
-
-# Detect physical NICs by checking for the hardware 'device' symlink in sysfs
-if [ "$NET_INTERFACES" = "auto" ]; then
-    INTERFACES=""
-    for iface_path in /sys/class/net/*; do
-        iface=$(basename "$iface_path")
-        if [ -e "${iface_path}/device" ]; then
-            INTERFACES="${INTERFACES} ${iface}"
-        fi
-    done
-    INTERFACES=$(echo "$INTERFACES" | xargs)
+COMMON_LIB="/usr/local/lib/ugreen-led-common.sh"
+if [ -f "$COMMON_LIB" ]; then
+    source "$COMMON_LIB"
 else
-    INTERFACES="$NET_INTERFACES"
+    echo "Error: Central library $COMMON_LIB not found." >&2
+    exit 1
 fi
 
-NET_LEDS=$(ls -d /sys/class/leds/ugreen:*:net* 2>/dev/null || true)
+NET_INTERFACE="${NET_INTERFACE:-vmbr0}"
+NET_COLOR="${NET_COLOR:-white}"
 
-if [ -z "$NET_LEDS" ]; then
-    echo "No UGREEN network LEDs found in sysfs."
-    exit 0
+# 1. Ensure kernel netdev trigger module is loaded
+lsmod | grep -q ledtrig_netdev || modprobe ledtrig-netdev 2>/dev/null || true
+
+# 2. Locate netdev LED sysfs node
+LED_DIR="/sys/class/leds/netdev"
+if [ ! -d "$LED_DIR" ]; then
+    LED_DIR=$(ls -d /sys/class/leds/netdev* 2>/dev/null | head -n1)
 fi
 
-for LED in $NET_LEDS; do
-    echo netdev > "${LED}/trigger" 2>/dev/null || true
-    echo 1 > "${LED}/rx" 2>/dev/null || true
-    echo 1 > "${LED}/tx" 2>/dev/null || true
-    echo 1 > "${LED}/link" 2>/dev/null || true
+if [ -z "$LED_DIR" ] || [ ! -d "$LED_DIR" ]; then
+    echo "Error: No network LED found under /sys/class/leds/netdev*." >&2
+    exit 1
+fi
 
-    for IFACE in $INTERFACES; do
-        echo "$IFACE" > "${LED}/device_name" 2>/dev/null || true
-    done
-done
+# 3. Activate kernel netdev trigger mode
+echo netdev > "${LED_DIR}/trigger" 2>/dev/null || true
+sleep 0.1
 
-echo "Network LEDs configured for physical interfaces: $INTERFACES"
+# 4. Bind target interface and enable activity indicators
+[ -w "${LED_DIR}/device_name" ] && echo "$NET_INTERFACE" > "${LED_DIR}/device_name" 2>/dev/null || true
+[ -w "${LED_DIR}/link" ]        && echo 1 > "${LED_DIR}/link" 2>/dev/null || true
+[ -w "${LED_DIR}/rx" ]          && echo 1 > "${LED_DIR}/rx" 2>/dev/null || true
+[ -w "${LED_DIR}/tx" ]          && echo 1 > "${LED_DIR}/tx" 2>/dev/null || true
+
+# 5. Apply normalized RGB color from central parser
+if [ -w "${LED_DIR}/color" ]; then
+    RGB_VAL=$(parse_color "$NET_COLOR")
+    echo "$RGB_VAL" > "${LED_DIR}/color" 2>/dev/null || true
+fi
+
+[ -w "${LED_DIR}/brightness" ] && echo 255 > "${LED_DIR}/brightness" 2>/dev/null || true
+
+echo "Network LED bound to interface '${NET_INTERFACE}' with color '${NET_COLOR}' (${RGB_VAL})."

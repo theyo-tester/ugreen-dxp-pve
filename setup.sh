@@ -68,10 +68,11 @@ modprobe i2c-dev led-ugreen ledtrig-netdev || true
 echo -e "${CYAN}=== 4. Deploying Local Executables ===${NC}"
 cp "${SCRIPT_DIR}/ugreen-fan-control.py" /usr/local/bin/ugreen-fan-control.py
 
+cp "${SCRIPT_DIR}/ugreen-led-common.sh" /usr/local/lib/ugreen-led-common.sh
 cp "${SCRIPT_DIR}/ugreen-led-setup.sh" /usr/local/bin/ugreen-led-setup.sh
 cp "${SCRIPT_DIR}/ugreen-net-led.sh" /usr/local/bin/ugreen-net-led.sh
 cp "${SCRIPT_DIR}/ugreen-hdd-led.sh" /usr/local/bin/ugreen-hdd-led.sh
-chmod +x /usr/local/bin/ugreen-led-setup.sh /usr/local/bin/ugreen-fan-control.py /usr/local/bin/ugreen-net-led.sh /usr/local/bin/ugreen-hdd-led.sh 
+chmod +x /usr/local/lib/ugreen-led-common.sh /usr/local/bin/ugreen-led-setup.sh /usr/local/bin/ugreen-fan-control.py /usr/local/bin/ugreen-net-led.sh /usr/local/bin/ugreen-hdd-led.sh 
 
 echo -e "${CYAN}=== 5. Deploying Environment Configurations & Services ===${NC}"
 if [ ! -f /etc/ugreen/ugreen-fan-control.env ]; then

@@ -2,9 +2,12 @@
 # UGREEN Multi-Bay HDD & NVMe LED Controller (Hardware Agnostic Auto-Scaling)
 # GitHub-ready standalone daemon for UGREEN NAS hardware running Linux / Proxmox VE
 
-ENV_FILE="/etc/ugreen/ugreen-leds.env"
-if [ -f "$ENV_FILE" ]; then
-    source "$ENV_FILE"
+COMMON_LIB="/usr/local/lib/ugreen-led-common.sh"
+if [ -f "$COMMON_LIB" ]; then
+    source "$COMMON_LIB"
+else
+    echo "Error: Central library $COMMON_LIB not found." >&2
+    exit 1
 fi
 
 BRIGHTNESS_SLEEP="${BRIGHTNESS_SLEEP:-5}"
@@ -12,7 +15,7 @@ BRIGHTNESS_ACTIVE="${BRIGHTNESS_ACTIVE:-20}"
 BRIGHTNESS_FULL="${BRIGHTNESS_FULL:-255}"
 IDLE_MINUTES="${IDLE_MINUTES:-15}"
 HDD_COLOR="${HDD_COLOR:-white}"
-SSD_COLOR="${SSD_COLOR:-amber}"
+SSD_COLOR="${SSD_COLOR:-blue}"
 DEGRADED_COLOR="${DEGRADED_COLOR:-red}"
 POLL_INTERVAL="${POLL_INTERVAL:-5}"
 
@@ -72,17 +75,9 @@ set_physical_slot_led() {
 
     local led_dir="/sys/class/leds/disk${slot}"
     if [ -d "$led_dir" ]; then
-        local rgb
-        case "$color_name" in
-            white) rgb="255 255 255" ;;
-            amber) rgb="255 60 0" ;;
-            red)   rgb="255 0 0" ;;
-            blue)  rgb="0 0 255" ;;
-            off)   rgb="0 0 0" ;;
-            *)     rgb="$color_name" ;;
-        esac
-
-        echo "$rgb" > "${led_dir}/color" 2>/dev/null || true
+        local RGB_VAL
+        RGB_VAL=$(parse_color "$color_name")
+        echo "$RGB_VAL" > "${led_dir}/color" 2>/dev/null || true
         echo "$brightness" > "${led_dir}/brightness" 2>/dev/null || true
     fi
 }
