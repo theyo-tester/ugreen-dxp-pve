@@ -18,27 +18,45 @@ POLL_INTERVAL="${POLL_INTERVAL:-5}"
 
 MAX_IDLE_LOOPS=$(( (IDLE_MINUTES * 60) / POLL_INTERVAL ))
 
-# 1. Self-contained I2C Probe logic (Generic & Vendor-Independent)
-auto_probe_i2c() {
-    if [ ! -d "/sys/class/leds/disk1" ]; then
-        # Find the I2C bus number corresponding to SMBus / i801 adapter
-        local bus_num=""
-        for adapter in /sys/class/i2c-adapter/i2c-*; do
-            [ -e "$adapter/name" ] || continue
-            if grep -qiE 'smbus|i801' "$adapter/name"; then
-                bus_num=$(basename "$adapter" | sed 's/i2c-//')
-                break
-            fi
-        done
+# 1. Standalone I2C & Module Probe Engine
+auto_probe_hardware() {
+    # Ensure required kernel modules are active
+    lsmod | grep -q i2c_dev || modprobe i2c-dev 2>/dev/null || true
+    lsmod | grep -q led_ugreen || modprobe led-ugreen 2>/dev/null || true
 
-        if [ -n "$bus_num" ] && [ -e "/sys/bus/i2c/devices/i2c-${bus_num}/new_device" ]; then
-            echo "led-ugreen 0x3a" > "/sys/bus/i2c/devices/i2c-${bus_num}/new_device" 2>/dev/null || true
-            sleep 1
+    # Skip probing if LEDs are already registered in sysfs
+    if [ -d "/sys/class/leds/disk1" ]; then
+        return 0
+    fi
+
+    # Locate the exact I2C bus number corresponding to the Intel SMBus Controller
+    local bus_num=""
+    for adapter in /sys/class/i2c-adapter/i2c-*; do
+        [ -e "$adapter/name" ] || continue
+        if grep -q "SMBus I801 adapter" "$adapter/name" 2>/dev/null; then
+            bus_num=$(basename "$adapter" | sed 's/i2c-//')
+            break
         fi
+    done
+
+    # Fallback to i2cdetect parsing if sysfs adapter lookup returned empty
+    if [ -z "$bus_num" ] && command -v i2cdetect >/dev/null 2>&1; then
+        bus_num=$(i2cdetect -l 2>/dev/null | grep "SMBus I801 adapter" | grep -Po "i2c-\K\d+" | head -n1)
+    fi
+
+    # Fallback to bus 0 if detection fails
+    bus_num="${bus_num:-0}"
+
+    local dev_path="/sys/bus/i2c/devices/i2c-${bus_num}/${bus_num}-003a"
+    local new_dev_file="/sys/bus/i2c/devices/i2c-${bus_num}/new_device"
+
+    if [ ! -d "$dev_path" ] && [ -w "$new_dev_file" ]; then
+        echo "led-ugreen 0x3a" > "$new_dev_file" 2>/dev/null || true
+        sleep 1
     fi
 }
 
-auto_probe_i2c
+auto_probe_hardware
 
 # 2. Verify sysfs hardware node existence
 MAX_BAYS=$(ls -d /sys/class/leds/disk[0-9]* 2>/dev/null | wc -l)
@@ -135,7 +153,6 @@ while true; do
     declare -A SLOT_BRIGHTNESS
     declare -A SLOT_PRIORITY
 
-    # Baseline Status
     for s in $(seq 1 "$MAX_BAYS"); do
         SLOT_COLOR[$s]="$HDD_COLOR"
         SLOT_BRIGHTNESS[$s]="$BRIGHTNESS_SLEEP"
@@ -166,7 +183,6 @@ while true; do
         fi
         PREV_IO[$dev]="$curr_io"
 
-        # Determine candidate drive state and priority
         cand_priority=0
         cand_color="$HDD_COLOR"
         cand_brightness="$BRIGHTNESS_SLEEP"
@@ -197,7 +213,6 @@ while true; do
             fi
         fi
 
-        # 2. Directly evaluate candidate priority against current slot priority
         if [ "$cand_priority" -gt "${SLOT_PRIORITY[$slot]}" ]; then
             SLOT_PRIORITY[$slot]="$cand_priority"
             SLOT_COLOR[$slot]="$cand_color"
@@ -205,7 +220,6 @@ while true; do
         fi
     done
 
-    # Apply highest-priority visual state to each slot
     for slot in $(seq 1 "$MAX_BAYS"); do
         set_physical_slot_led "$slot" "${SLOT_COLOR[$slot]}" "${SLOT_BRIGHTNESS[$slot]}"
     done
