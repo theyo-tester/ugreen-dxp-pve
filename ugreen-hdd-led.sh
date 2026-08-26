@@ -18,6 +18,10 @@ HDD_COLOR="${HDD_COLOR:-white}"
 SSD_COLOR="${SSD_COLOR:-blue}"
 DEGRADED_COLOR="${DEGRADED_COLOR:-red}"
 POLL_INTERVAL="${POLL_INTERVAL:-5}"
+# SCSI host number -> LED slot offset for HCTL-based mapping (host 0 => disk1 by default; see UGREEN's "Disk Mapping" docs, layout is model-dependent).
+HCTL_SLOT_OFFSET="${HCTL_SLOT_OFFSET:-1}"
+# Set to 1 to print per-device IO deltas and computed slot/priority each poll, useful for diagnosing activity detection.
+HDD_LED_DEBUG="${HDD_LED_DEBUG:-0}"
 
 MAX_IDLE_LOOPS=$(( (IDLE_MINUTES * 60) / POLL_INTERVAL ))
 
@@ -68,6 +72,13 @@ if [ "$MAX_BAYS" -eq 0 ]; then
     exit 1
 fi
 
+# Manual color/brightness writes only take effect if no kernel trigger is
+# fighting for control of the LED, so force every disk LED's trigger to "none".
+for s in $(seq 1 "$MAX_BAYS"); do
+    trig_file="/sys/class/leds/disk${s}/trigger"
+    [ -w "$trig_file" ] && echo none > "$trig_file" 2>/dev/null || true
+done
+
 set_physical_slot_led() {
     local slot="$1"
     local color_name="$2"
@@ -82,43 +93,38 @@ set_physical_slot_led() {
     fi
 }
 
+# Builds a persistent dev-name -> LED-slot map once at startup. SATA/SAS disks
+# are mapped via HCTL (scsi host number), which is stable across reboots,
+# unlike the ATA port number previously parsed from /dev/disk/by-path. There's
+# no dedicated NVMe LED, so each NVMe (there can be several) shares the LED of
+# one HDD bay, in PCI-address order, wrapping back to slot 1 if oversubscribed.
+declare -A DEV_SLOT_MAP
+
+build_slot_map() {
+    DEV_SLOT_MAP=()
+
+    while read -r name hctl; do
+        [ -z "$name" ] && continue
+        local host="${hctl%%:*}"
+        [[ "$host" =~ ^[0-9]+$ ]] || continue
+        local slot=$((host + HCTL_SLOT_OFFSET))
+        if [ "$slot" -ge 1 ] && [ "$slot" -le "$MAX_BAYS" ]; then
+            DEV_SLOT_MAP[$name]="$slot"
+        fi
+    done < <(lsblk -S -x hctl -o name,hctl -n 2>/dev/null)
+
+    local nvme_index=0
+    for dev_path in $(ls -d /sys/block/nvme*n1 2>/dev/null | sort -V); do
+        [ -e "$dev_path" ] || continue
+        nvme_index=$((nvme_index + 1))
+        local slot=$(( ((nvme_index - 1) % MAX_BAYS) + 1 ))
+        DEV_SLOT_MAP[$(basename "$dev_path")]="$slot"
+    done
+}
+
 get_physical_slot() {
     local dev="$1"
-    local by_path
-    by_path=$(find -L /dev/disk/by-path/ -samefile "/dev/${dev}" 2>/dev/null | head -n1)
-
-    if [ -z "$by_path" ]; then
-        echo 0
-        return
-    fi
-
-    if [[ "$by_path" =~ -ata-([0-9]+) ]]; then
-        local port="${BASH_REMATCH[1]}"
-        if [ "$port" -le "$MAX_BAYS" ]; then
-            echo "$port"
-        else
-            echo 0
-        fi
-    elif [[ "$by_path" =~ nvme-1 ]]; then
-        local pci_addr
-        pci_addr=$(echo "$by_path" | grep -oE '[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]')
-
-        local nvme_index=0
-        for addr in $(ls -l /dev/disk/by-path/*nvme-1 2>/dev/null | grep -oE '[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-9]' | sort -u); do
-            nvme_index=$((nvme_index + 1))
-            if [ "$addr" = "$pci_addr" ]; then
-                break
-            fi
-        done
-        
-        if [ "$nvme_index" -le "$MAX_BAYS" ]; then
-            echo "$nvme_index"
-        else
-            echo 0
-        fi
-    else
-        echo 0
-    fi
+    echo "${DEV_SLOT_MAP[$dev]:-0}"
 }
 
 get_degraded_drives() {
@@ -139,7 +145,12 @@ get_degraded_drives() {
 declare -A PREV_IO
 declare -A IDLE_COUNTERS
 
+build_slot_map
+
 echo "Starting UGREEN Disk LED Daemon (Detected ${MAX_BAYS} Physical Bays)..."
+for dev in "${!DEV_SLOT_MAP[@]}"; do
+    echo "  Mapped /dev/${dev} -> disk${DEV_SLOT_MAP[$dev]}"
+done
 
 while true; do
     DEGRADED_DRIVES=$(get_degraded_drives)
@@ -212,6 +223,10 @@ while true; do
             SLOT_PRIORITY[$slot]="$cand_priority"
             SLOT_COLOR[$slot]="$cand_color"
             SLOT_BRIGHTNESS[$slot]="$cand_brightness"
+        fi
+
+        if [ "$HDD_LED_DEBUG" -eq 1 ]; then
+            echo "[debug] dev=$dev slot=$slot prev_io=$prev_io curr_io=$curr_io is_active=$is_active idle_cnt=$idle_cnt cand_priority=$cand_priority" >&2
         fi
     done
 

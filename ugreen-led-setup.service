@@ -6,7 +6,7 @@ After=systemd-modules-load.service
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/ugreen-led-setup.sh bind
-ExecStop=/usr/local/bin/ugreen-led-setup.sh unbind
+# ExecStop=/usr/local/bin/ugreen-led-setup.sh unbind
 RemainAfterExit=yes
 
 [Install]
