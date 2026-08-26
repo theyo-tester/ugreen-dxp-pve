@@ -1,6 +1,7 @@
 [Unit]
 Description=UGREEN Multi-Bay HDD & NVMe LED Controller
-After=syslog.target network.target local-fs.target
+Requires=ugreen-led-setup.service
+After=ugreen-led-setup.service
 
 [Service]
 Type=simple

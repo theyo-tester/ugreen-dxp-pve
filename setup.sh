@@ -67,9 +67,11 @@ modprobe i2c-dev led-ugreen ledtrig-netdev || true
 
 echo -e "${CYAN}=== 4. Deploying Local Executables ===${NC}"
 cp "${SCRIPT_DIR}/ugreen-fan-control.py" /usr/local/bin/ugreen-fan-control.py
+
+cp "${SCRIPT_DIR}/ugreen-led-setup.sh" /usr/local/bin/ugreen-led-setup.sh
 cp "${SCRIPT_DIR}/ugreen-net-led.sh" /usr/local/bin/ugreen-net-led.sh
 cp "${SCRIPT_DIR}/ugreen-hdd-led.sh" /usr/local/bin/ugreen-hdd-led.sh
-chmod +x /usr/local/bin/ugreen-fan-control.py /usr/local/bin/ugreen-net-led.sh /usr/local/bin/ugreen-hdd-led.sh
+chmod +x /usr/local/bin/ugreen-led-setup.sh /usr/local/bin/ugreen-fan-control.py /usr/local/bin/ugreen-net-led.sh /usr/local/bin/ugreen-hdd-led.sh 
 
 echo -e "${CYAN}=== 5. Deploying Environment Configurations & Services ===${NC}"
 if [ ! -f /etc/ugreen/ugreen-fan-control.env ]; then
@@ -82,6 +84,8 @@ if [ ! -f /etc/ugreen/ugreen-leds.env ]; then
     echo -e "${GREEN}Created /etc/ugreen/ugreen-leds.env${NC}"
 fi
 
+
+cp "${SCRIPT_DIR}/ugreen-led-setup.service" /etc/systemd/system/ugreen-led-setup.service
 cp "${SCRIPT_DIR}/ugreen-fan-control.service" /etc/systemd/system/ugreen-fan-control.service
 cp "${SCRIPT_DIR}/ugreen-hdd-led.service" /etc/systemd/system/ugreen-hdd-led.service
 cp "${SCRIPT_DIR}/ugreen-net-led.service" /etc/systemd/system/ugreen-net-led.service
@@ -89,6 +93,7 @@ cp "${SCRIPT_DIR}/ugreen-net-led.service" /etc/systemd/system/ugreen-net-led.ser
 echo -e "${CYAN}=== 6. Enabling Systemd Services ===${NC}"
 systemctl disable --now fancontrol 2>/dev/null || true
 systemctl daemon-reload
+systemctl enable --now ugreen-led-setup.service
 systemctl enable --now ugreen-fan-control.service
 systemctl enable --now ugreen-hdd-led.service
 systemctl enable --now ugreen-net-led.service

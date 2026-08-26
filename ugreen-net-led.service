@@ -1,7 +1,7 @@
 [Unit]
 Description=UGREEN Network LED Controller
-After=network-online.target
-Wants=network-online.target
+Requires=ugreen-led-setup.service
+After=ugreen-led-setup.service
 
 [Service]
 Type=oneshot

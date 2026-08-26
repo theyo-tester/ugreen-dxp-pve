@@ -1,0 +1,13 @@
+[Unit]
+Description=UGREEN LED Hardware Initialization & I2C Probe
+Documentation=https://github.com/theyo-tester/ugreen-dxp-pve
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ugreen-led-setup.sh bind
+ExecStop=/usr/local/bin/ugreen-led-setup.sh unbind
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
