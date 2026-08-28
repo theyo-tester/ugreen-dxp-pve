@@ -25,7 +25,7 @@ mkdir -p /etc/ugreen
 
 echo -e "${CYAN}=== 1. Installing System Dependencies ===${NC}"
 apt update
-apt install -y proxmox-default-headers dkms build-essential i2c-tools git cmake lm-sensors smartmontools nvme-cli python3 sysstat hdparm iproute2
+apt install -y proxmox-default-headers dkms build-essential i2c-tools git cmake lm-sensors smartmontools nvme-cli python3 sysstat hdparm iproute2 bpftrace
 
 if ! grep -q "^drivetemp" /etc/modules; then
     echo "drivetemp" >> /etc/modules
