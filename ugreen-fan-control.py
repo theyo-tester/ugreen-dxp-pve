@@ -72,6 +72,22 @@ def auto_detect_pwm_path():
                 continue
     return None
 
+def enable_manual_pwm(pwm_path):
+    # it87/hwmon PWM channels reject direct writes until switched out of
+    # automatic/BIOS mode via the matching pwmN_enable attribute.
+    enable_path = f"{pwm_path}_enable"
+    if not os.path.exists(enable_path):
+        return
+    try:
+        with open(enable_path, "r") as f:
+            if f.read().strip() == "1":
+                return
+        with open(enable_path, "w") as f:
+            f.write("1")
+        logging.info(f"Set {enable_path} to manual mode (1)")
+    except Exception as e:
+        logging.warning(f"Failed to set {enable_path} to manual mode: {e}")
+
 def read_cpu_temp(override_path=""):
     if override_path and os.path.exists(override_path):
         try:
@@ -157,6 +173,8 @@ def main():
 
     cpu_override_path = os.getenv("CPU_TEMP_PATH", "")
 
+    enable_manual_pwm(pwm_path)
+
     logging.info(f"Starting UGREEN Fan Control Daemon (Interval: {poll_interval}s)")
     logging.info(f"Target PWM Path: {pwm_path}")
     logging.info(f"CPU Fan Curve: {cpu_curve}")
@@ -194,6 +212,7 @@ def main():
         except Exception as e:
             logging.error(f"Unexpected error in main loop: {e}. Applying failsafe PWM.")
             try:
+                enable_manual_pwm(pwm_path)
                 with open(pwm_path, "w") as f:
                     f.write(str(failsafe_pwm))
                 current_applied_pwm = failsafe_pwm

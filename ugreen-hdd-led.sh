@@ -112,9 +112,17 @@ set_physical_slot_led() {
 
 # Fires exactly one blink cycle so a brief IO burst detected during this poll
 # is shown as a single pulse, instead of blinking for the whole poll interval.
+# rgb (optional) overrides the slot's color for the pulse, e.g. when bpftrace
+# already knows which device (HDD vs NVMe) triggered it.
 flash_slot_led() {
     local slot="$1"
+    local rgb="$2"
     local led_dir="/sys/class/leds/disk${slot}"
+    [ -d "$led_dir" ] || return 0
+    if [ -n "$rgb" ]; then
+        echo "$rgb" > "${led_dir}/color" 2>/dev/null || true
+        echo "$BRIGHTNESS_ACTIVE" > "${led_dir}/brightness" 2>/dev/null || true
+    fi
     [ -w "${led_dir}/blink_type" ] || return 0
     echo "blink ${BLINK_ON_MS} ${BLINK_OFF_MS}" > "${led_dir}/blink_type" 2>/dev/null || return 0
     sleep "$FLASH_DURATION_SEC"
@@ -166,12 +174,13 @@ resolve_major_minor() {
 }
 
 # Generates a bpftrace script that maps each tracked device's dev_t to its LED
-# slot once (in BEGIN), then emits the slot number on real IO completion,
-# debounced per-slot so a shared LED can't be double-fired by two devices.
+# slot and resting color once (in BEGIN), then emits "slot R G B" on real data
+# IO completion (SMART/temperature-probe passthrough requests are excluded via
+# rwbs), debounced per-slot so a shared LED can't be double-fired by two devices.
 generate_bpftrace_script() {
     local bt_file="$1"
     local debounce_ns=$(( (BLINK_ON_MS + BLINK_OFF_MS) * 1000000 ))
-    local dev mm maj min slot
+    local dev mm maj min slot color
 
     {
         echo "BEGIN"
@@ -181,20 +190,27 @@ generate_bpftrace_script() {
             mm=$(resolve_major_minor "$dev") || continue
             maj="${mm% *}"
             min="${mm#* }"
+            if [[ "$dev" =~ ^nvme ]]; then
+                color=$(parse_color "$SSD_COLOR")
+            else
+                color=$(parse_color "$HDD_COLOR")
+            fi
             echo "    @slot[$maj, $min] = $slot;"
+            echo "    @color[$maj, $min] = \"$color\";"
         done
         echo "    @debounce_ns = ${debounce_ns};"
         echo "}"
         cat <<'BPF_EOF'
 
 tracepoint:block:block_rq_complete
+/str(args->rwbs) == "R" || str(args->rwbs) == "W" || str(args->rwbs) == "WS"/
 {
     $maj = args->dev >> 20;
     $min = args->dev & 0xfffff;
     $slot = @slot[$maj, $min];
     if ($slot != 0 && (nsecs - @last[$slot]) > @debounce_ns) {
         @last[$slot] = nsecs;
-        printf("%d\n", $slot);
+        printf("%d %s\n", $slot, @color[$maj, $min]);
     }
 }
 BPF_EOF
@@ -218,8 +234,11 @@ start_bpftrace_monitor() {
     coproc BPFTRACE_CO { exec "$bpftrace_bin" "$BPFTRACE_SCRIPT" 2>/dev/null; }
     BPFTRACE_PID="$BPFTRACE_CO_PID"
 
-    while read -r -u "${BPFTRACE_CO[0]}" bpf_slot; do
-        [[ "$bpf_slot" =~ ^[0-9]+$ ]] && flash_slot_led "$bpf_slot" &
+    # coproc's own fd slot isn't reliably inherited by a backgrounded subshell, so dup it to a stable fd first.
+    exec {BPFTRACE_FD}<&"${BPFTRACE_CO[0]}"
+
+    while read -r -u "$BPFTRACE_FD" bpf_slot bpf_r bpf_g bpf_b; do
+        [[ "$bpf_slot" =~ ^[0-9]+$ ]] && flash_slot_led "$bpf_slot" "$bpf_r $bpf_g $bpf_b" &
     done &
     BPFTRACE_READER_PID=$!
 
@@ -230,6 +249,7 @@ start_bpftrace_monitor() {
 stop_bpftrace_monitor() {
     [ -n "${BPFTRACE_READER_PID:-}" ] && kill "$BPFTRACE_READER_PID" 2>/dev/null || true
     [ -n "${BPFTRACE_PID:-}" ] && kill "$BPFTRACE_PID" 2>/dev/null || true
+    [ -n "${BPFTRACE_FD:-}" ] && exec {BPFTRACE_FD}<&- 2>/dev/null || true
 }
 
 get_degraded_drives() {
@@ -314,10 +334,6 @@ while true; do
                 cand_color="$SSD_COLOR"
                 cand_brightness="$BRIGHTNESS_ACTIVE"
                 [ "$BPFTRACE_AVAILABLE" -eq 0 ] && cand_blink_mode=1
-            elif [ "$idle_cnt" -lt "$MAX_IDLE_LOOPS" ]; then
-                cand_priority=2
-                cand_color="$SSD_COLOR"
-                cand_brightness="$BRIGHTNESS_ACTIVE"
             fi
         else
             if [ "$is_active" -eq 1 ]; then
