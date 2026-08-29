@@ -203,7 +203,7 @@ generate_bpftrace_script() {
         cat <<'BPF_EOF'
 
 tracepoint:block:block_rq_complete
-/str(args->rwbs) == "R" || str(args->rwbs) == "W" || str(args->rwbs) == "WS"/
+/strcontains(args->rwbs, "R") || strcontains(args->rwbs, "W")/
 {
     $maj = args->dev >> 20;
     $min = args->dev & 0xfffff;
@@ -231,8 +231,16 @@ start_bpftrace_monitor() {
 
     generate_bpftrace_script "$BPFTRACE_SCRIPT"
 
-    coproc BPFTRACE_CO { exec "$bpftrace_bin" "$BPFTRACE_SCRIPT" 2>/dev/null; }
+    coproc BPFTRACE_CO { exec "$bpftrace_bin" "$BPFTRACE_SCRIPT"; }
     BPFTRACE_PID="$BPFTRACE_CO_PID"
+
+    # Give bpftrace a moment to compile/attach; if it exits immediately (e.g. a
+    # script error), fall back to poll-driven flashing instead of going dark.
+    sleep 1
+    if ! kill -0 "$BPFTRACE_PID" 2>/dev/null; then
+        echo "bpftrace exited immediately (see log above), falling back to poll-driven flashing" >&2
+        return 0
+    fi
 
     # coproc's own fd slot isn't reliably inherited by a backgrounded subshell, so dup it to a stable fd first.
     exec {BPFTRACE_FD}<&"${BPFTRACE_CO[0]}"
