@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-EnvironmentFile=-/etc/ugreen-fan-control.env
+EnvironmentFile=-/etc/ugreen/green-fan-control.env
 ExecStart=/usr/bin/python3 /usr/local/bin/ugreen-fan-control.py
 Restart=always
 RestartSec=5
