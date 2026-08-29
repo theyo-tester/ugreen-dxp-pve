@@ -283,6 +283,7 @@ get_degraded_drives() {
 
 declare -A PREV_IO
 declare -A IDLE_COUNTERS
+declare -A PREV_SLOT_PRIORITY
 
 build_slot_map
 start_bpftrace_monitor
@@ -291,6 +292,13 @@ trap stop_bpftrace_monitor EXIT
 echo "Starting UGREEN Disk LED Daemon (Detected ${MAX_BAYS} Physical Bays)..."
 for dev in "${!DEV_SLOT_MAP[@]}"; do
     echo "  Mapped /dev/${dev} -> disk${DEV_SLOT_MAP[$dev]}"
+done
+
+# One-time baseline reset; afterwards the slow loop only touches a slot when
+# it actually has something to assert (degraded/recent HDD activity), so it
+# never overwrites the resting color bpftrace's flashes leave behind.
+for s in $(seq 1 "$MAX_BAYS"); do
+    set_physical_slot_led "$s" "$HDD_COLOR" "$BRIGHTNESS_SLEEP" 0
 done
 
 while true; do
@@ -375,7 +383,13 @@ while true; do
     done
 
     for slot in $(seq 1 "$MAX_BAYS"); do
-        set_physical_slot_led "$slot" "${SLOT_COLOR[$slot]}" "${SLOT_BRIGHTNESS[$slot]}" "${SLOT_BLINK_MODE[$slot]}"
+        # Apply on any transition (including dropping back to idle, so a
+        # previously-active slot still decays to dim); skip while steady-idle
+        # so bpftrace's own resting color/brightness isn't disturbed.
+        if [ "${SLOT_PRIORITY[$slot]}" -gt 0 ] || [ "${PREV_SLOT_PRIORITY[$slot]:-0}" -gt 0 ]; then
+            set_physical_slot_led "$slot" "${SLOT_COLOR[$slot]}" "${SLOT_BRIGHTNESS[$slot]}" "${SLOT_BLINK_MODE[$slot]}"
+        fi
+        PREV_SLOT_PRIORITY[$slot]="${SLOT_PRIORITY[$slot]}"
     done
 
     # Only wait on the fallback flash jobs just spawned, not on every
