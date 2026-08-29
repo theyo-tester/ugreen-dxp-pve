@@ -380,10 +380,19 @@ while true; do
         set_physical_slot_led "$slot" "${SLOT_COLOR[$slot]}" "${SLOT_BRIGHTNESS[$slot]}" "${SLOT_BLINK_MODE[$slot]}"
     done
 
+    # Only wait on the fallback flash jobs just spawned, not on every
+    # background job of the shell (a bare `wait` would block forever on the
+    # long-running bpftrace reader loop).
+    fallback_flash_pids=()
     for slot in $(seq 1 "$MAX_BAYS"); do
-        [ "${SLOT_BLINK_MODE[$slot]}" -eq 1 ] && flash_slot_led "$slot" &
+        if [ "${SLOT_BLINK_MODE[$slot]}" -eq 1 ]; then
+            flash_slot_led "$slot" &
+            fallback_flash_pids+=("$!")
+        fi
     done
-    wait
+    if [ "${#fallback_flash_pids[@]}" -gt 0 ]; then
+        wait "${fallback_flash_pids[@]}"
+    fi
 
     sleep "$POLL_INTERVAL"
 done
