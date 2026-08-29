@@ -329,18 +329,18 @@ while true; do
             cand_brightness="$BRIGHTNESS_FULL"
             cand_blink_mode=2
         elif [[ "$dev" =~ ^nvme ]]; then
-            if [ "$is_active" -eq 1 ]; then
+            if [ "$BPFTRACE_AVAILABLE" -eq 0 ] && [ "$is_active" -eq 1 ]; then
                 cand_priority=4
                 cand_color="$SSD_COLOR"
                 cand_brightness="$BRIGHTNESS_ACTIVE"
-                [ "$BPFTRACE_AVAILABLE" -eq 0 ] && cand_blink_mode=1
+                cand_blink_mode=1
             fi
         else
-            if [ "$is_active" -eq 1 ]; then
+            if [ "$BPFTRACE_AVAILABLE" -eq 0 ] && [ "$is_active" -eq 1 ]; then
                 cand_priority=3
                 cand_color="$HDD_COLOR"
                 cand_brightness="$BRIGHTNESS_ACTIVE"
-                [ "$BPFTRACE_AVAILABLE" -eq 0 ] && cand_blink_mode=1
+                cand_blink_mode=1
             elif [ "$idle_cnt" -lt "$MAX_IDLE_LOOPS" ]; then
                 cand_priority=1
                 cand_color="$HDD_COLOR"

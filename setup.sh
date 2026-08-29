@@ -14,14 +14,63 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="/tmp/ugreen-setup"
+MODE="${1:-install}"
 
-echo -e "${CYAN}=== Starting UGREEN NASsync Deployment ===${NC}"
+case "$MODE" in
+    install|update) ;;
+    *)
+        echo -e "${RED}Usage: $0 [install|update]${NC}" >&2
+        exit 2
+        ;;
+esac
+
+# Appends KEY=VALUE lines (with their preceding comments) from src to dest that
+# don't already exist in dest, so re-running setup.sh in update mode picks up
+# new config variables without touching values the user already customized.
+merge_env_file() {
+    local src="$1"
+    local dest="$2"
+
+    if [ ! -f "$dest" ]; then
+        cp "$src" "$dest"
+        echo -e "${GREEN}Created ${dest}${NC}"
+        return
+    fi
+
+    local pending_comments=""
+    local added=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" =~ ^[[:space:]]*# ]] || [[ -z "$line" ]]; then
+            pending_comments+="${line}"$'\n'
+            continue
+        fi
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)= ]]; then
+            local key="${BASH_REMATCH[1]}"
+            if ! grep -q "^${key}=" "$dest"; then
+                {
+                    echo ""
+                    printf '%s' "$pending_comments"
+                    echo "$line"
+                } >> "$dest"
+                echo -e "${GREEN}  + Added ${key} to ${dest}${NC}"
+                added=1
+            fi
+        fi
+        pending_comments=""
+    done < "$src"
+
+    [ "$added" -eq 0 ] && echo "  (no new variables for ${dest})"
+}
+
+echo -e "${CYAN}=== Starting UGREEN NASsync Deployment (mode: ${MODE}) ===${NC}"
 echo -e "${YELLOW}Working Directory: ${WORK_DIR}${NC}"
 echo -e "${YELLOW}Target Config Directory: /etc/ugreen${NC}"
 
 rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 mkdir -p /etc/ugreen
+
+if [ "$MODE" = "install" ]; then
 
 echo -e "${CYAN}=== 1. Installing System Dependencies ===${NC}"
 apt update
@@ -65,6 +114,10 @@ ledtrig-netdev
 EOF
 modprobe i2c-dev led-ugreen ledtrig-netdev || true
 
+else
+    echo -e "${CYAN}=== Update mode: skipping dependency install & kernel module compilation ===${NC}"
+fi
+
 echo -e "${CYAN}=== 4. Deploying Local Executables ===${NC}"
 cp "${SCRIPT_DIR}/ugreen-fan-control.py" /usr/local/bin/ugreen-fan-control.py
 
@@ -75,15 +128,8 @@ cp "${SCRIPT_DIR}/ugreen-hdd-led.sh" /usr/local/bin/ugreen-hdd-led.sh
 chmod +x /usr/local/lib/ugreen-led-common.sh /usr/local/bin/ugreen-led-setup.sh /usr/local/bin/ugreen-fan-control.py /usr/local/bin/ugreen-net-led.sh /usr/local/bin/ugreen-hdd-led.sh 
 
 echo -e "${CYAN}=== 5. Deploying Environment Configurations & Services ===${NC}"
-if [ ! -f /etc/ugreen/ugreen-fan-control.env ]; then
-    cp "${SCRIPT_DIR}/ugreen-fan-control.env" /etc/ugreen/ugreen-fan-control.env
-    echo -e "${GREEN}Created /etc/ugreen/ugreen-fan-control.env${NC}"
-fi
-
-if [ ! -f /etc/ugreen/ugreen-leds.env ]; then
-    cp "${SCRIPT_DIR}/ugreen-leds.env" /etc/ugreen/ugreen-leds.env
-    echo -e "${GREEN}Created /etc/ugreen/ugreen-leds.env${NC}"
-fi
+merge_env_file "${SCRIPT_DIR}/ugreen-fan-control.env" /etc/ugreen/ugreen-fan-control.env
+merge_env_file "${SCRIPT_DIR}/ugreen-leds.env" /etc/ugreen/ugreen-leds.env
 
 
 cp "${SCRIPT_DIR}/ugreen-led-setup.service" /etc/systemd/system/ugreen-led-setup.service
@@ -98,6 +144,12 @@ systemctl enable --now ugreen-led-setup.service
 systemctl enable --now ugreen-fan-control.service
 systemctl enable --now ugreen-hdd-led.service
 systemctl enable --now ugreen-net-led.service
+if [ "$MODE" = "update" ]; then
+    systemctl restart ugreen-led-setup.service
+    systemctl restart ugreen-fan-control.service
+    systemctl restart ugreen-hdd-led.service
+    systemctl restart ugreen-net-led.service
+fi
 
 rm -rf "$WORK_DIR"
 echo -e "${GREEN}=== Deployment Completed Successfully! ===${NC}"
