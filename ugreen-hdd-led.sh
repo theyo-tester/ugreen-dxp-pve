@@ -128,11 +128,9 @@ flash_slot_led() {
     sleep "$FLASH_DURATION_SEC"
     echo "none" > "${led_dir}/blink_type" 2>/dev/null || true
     if [ -n "$rgb" ]; then
-        # revert to the resting baseline immediately instead of waiting up to
-        # POLL_INTERVAL for the slow loop to notice the slot is idle again.
-        local base_rgb
-        base_rgb=$(parse_color "$HDD_COLOR")
-        echo "$base_rgb" > "${led_dir}/color" 2>/dev/null || true
+        # Only dim the brightness back down; leave color as-is (whatever this
+        # pulse used) so two devices sharing a slot never race on re-coloring
+        # it mid-pulse, only on brightness (which is harmless to overlap).
         echo "$BRIGHTNESS_SLEEP" > "${led_dir}/brightness" 2>/dev/null || true
     fi
 }
