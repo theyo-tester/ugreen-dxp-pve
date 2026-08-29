@@ -32,6 +32,7 @@ Native Linux PWM management tools (such as standard `fancontrol` from `lm-sensor
 
 ### Fan Control
 * **Dual Independent Fan Curves**: Dynamically interpolates target PWM values for CPU and storage drives (NVMe & SATA), applying the higher fan speed demand between the two.
+* **Selectable Curve Presets (`FAN_MODE`)**: Choose between `silent` (quietest, tolerates higher temps before spinning up), `normal` (balanced default), or `powerful` (spins up earlier/harder for maximum cooling) — each with its own independent CPU/disk curve pair.
 * **Native Host Sensor Parsing**: Reads temperatures directly from host `/sys/class/hwmon` using `coretemp`, `nvme`, and the Linux kernel `drivetemp` module for SATA drives.
 * **HDD Standby Protection**: Checks drive power states before querying via `smartctl` fallback to avoid waking up spun-down disks.
 * **Automatic Hardware Detection**: Auto-detects the active ITE Super I/O PWM control interface (`pwm3`, `pwm2`, or `pwm1`) and switches it into manual mode.
@@ -44,7 +45,7 @@ Native Linux PWM management tools (such as standard `fancontrol` from `lm-sensor
 * **Automatic NVMe-to-bay distribution** for boards with more NVMe slots than dedicated LEDs, sharing bay LEDs with priority-based color arbitration.
 * **Degraded-drive alert**: a ZFS pool member reported as `FAULTED`/`DEGRADED`/`UNAVAIL`/`REMOVED` immediately takes over its LED with a continuously blinking alert color.
 * **Poll-driven fallback** if `bpftrace` is unavailable, so the daemon never goes silent.
-* **Network activity LED** bound to the kernel's native `netdev` trigger for the configured interface.
+* **Network activity LED** bound to the kernel's native `netdev` trigger for the configured interface, using the same `BRIGHTNESS_ACTIVE` level as the disk LEDs.
 
 ---
 
@@ -104,9 +105,22 @@ FAILSAFE_PWM=200
 MIN_PWM=50
 MAX_PWM=255
 
+# Which curve preset to use: silent, normal, or powerful.
+FAN_MODE=normal
+
 # Fan curves format: "temperature:pwm_value,temperature:pwm_value"
+# Balanced default curves (used when FAN_MODE=normal)
 CPU_FAN_CURVE=35:50,50:100,65:180,75:255
 DISK_FAN_CURVE=35:60,45:110,55:180,60:255
+
+# Quietest curves (FAN_MODE=silent). MIN_PWM above still applies as a floor,
+# so lower it too if you want the fan to idle at/near 0 below the first point.
+SILENT_CPU_FAN_CURVE=40:0,55:40,65:80,75:150
+SILENT_DISK_FAN_CURVE=38:0,45:40,55:80,62:150
+
+# Spins up earlier/harder for maximum cooling (FAN_MODE=powerful).
+POWERFUL_CPU_FAN_CURVE=30:120,45:180,55:220,65:255
+POWERFUL_DISK_FAN_CURVE=30:120,40:180,50:220,55:255
 ```
 
 Apply changes:

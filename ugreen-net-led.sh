@@ -12,6 +12,7 @@ fi
 
 NET_INTERFACE="${NET_INTERFACE:-vmbr0}"
 NET_COLOR="${NET_COLOR:-white}"
+BRIGHTNESS_ACTIVE="${BRIGHTNESS_ACTIVE:-20}"
 
 # 1. Ensure kernel netdev trigger module is loaded
 lsmod | grep -q ledtrig_netdev || modprobe ledtrig-netdev 2>/dev/null || true
@@ -43,6 +44,6 @@ if [ -w "${LED_DIR}/color" ]; then
     echo "$RGB_VAL" > "${LED_DIR}/color" 2>/dev/null || true
 fi
 
-[ -w "${LED_DIR}/brightness" ] && echo 255 > "${LED_DIR}/brightness" 2>/dev/null || true
+[ -w "${LED_DIR}/brightness" ] && echo "$BRIGHTNESS_ACTIVE" > "${LED_DIR}/brightness" 2>/dev/null || true
 
 echo "Network LED bound to interface '${NET_INTERFACE}' with color '${NET_COLOR}' (${RGB_VAL})."

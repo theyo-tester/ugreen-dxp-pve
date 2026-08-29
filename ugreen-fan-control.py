@@ -157,8 +157,30 @@ def main():
     min_pwm = int(os.getenv("MIN_PWM", "50"))
     max_pwm = int(os.getenv("MAX_PWM", "255"))
 
-    cpu_curve_str = os.getenv("CPU_FAN_CURVE", "35:50,50:100,65:180,75:255")
-    disk_curve_str = os.getenv("DISK_FAN_CURVE", "35:60,45:110,55:180,60:255")
+    # FAN_MODE selects which curve preset to use: silent (quietest, higher
+    # temps tolerated), normal (default balanced curves), or powerful (spins
+    # up earlier/harder for maximum cooling).
+    fan_mode = os.getenv("FAN_MODE", "normal").strip().lower()
+    curve_presets = {
+        "silent": (
+            os.getenv("SILENT_CPU_FAN_CURVE", "40:0,55:40,65:80,75:150"),
+            os.getenv("SILENT_DISK_FAN_CURVE", "38:0,45:40,55:80,62:150"),
+        ),
+        "normal": (
+            os.getenv("CPU_FAN_CURVE", "35:50,50:100,65:180,75:255"),
+            os.getenv("DISK_FAN_CURVE", "35:60,45:110,55:180,60:255"),
+        ),
+        "powerful": (
+            os.getenv("POWERFUL_CPU_FAN_CURVE", "30:120,45:180,55:220,65:255"),
+            os.getenv("POWERFUL_DISK_FAN_CURVE", "30:120,40:180,50:220,55:255"),
+        ),
+    }
+
+    if fan_mode not in curve_presets:
+        logging.warning(f"Unknown FAN_MODE '{fan_mode}', falling back to 'normal'")
+        fan_mode = "normal"
+
+    cpu_curve_str, disk_curve_str = curve_presets[fan_mode]
 
     cpu_curve = parse_curve(cpu_curve_str)
     disk_curve = parse_curve(disk_curve_str)
@@ -177,6 +199,7 @@ def main():
 
     logging.info(f"Starting UGREEN Fan Control Daemon (Interval: {poll_interval}s)")
     logging.info(f"Target PWM Path: {pwm_path}")
+    logging.info(f"Fan Mode: {fan_mode}")
     logging.info(f"CPU Fan Curve: {cpu_curve}")
     logging.info(f"Disk Fan Curve: {disk_curve}")
 
