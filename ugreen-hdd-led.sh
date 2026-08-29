@@ -13,7 +13,6 @@ fi
 BRIGHTNESS_SLEEP="${BRIGHTNESS_SLEEP:-5}"
 BRIGHTNESS_ACTIVE="${BRIGHTNESS_ACTIVE:-20}"
 BRIGHTNESS_FULL="${BRIGHTNESS_FULL:-255}"
-IDLE_MINUTES="${IDLE_MINUTES:-15}"
 HDD_COLOR="${HDD_COLOR:-white}"
 SSD_COLOR="${SSD_COLOR:-blue}"
 DEGRADED_COLOR="${DEGRADED_COLOR:-red}"
@@ -30,8 +29,6 @@ FLASH_DURATION_SEC=$(awk -v on="$BLINK_ON_MS" -v off="$BLINK_OFF_MS" 'BEGIN { pr
 # Set to 0 to always use poll-driven flashing, even if bpftrace is installed.
 BPFTRACE_ENABLED="${BPFTRACE_ENABLED:-1}"
 BPFTRACE_SCRIPT="/run/ugreen-disk-activity.bt"
-
-MAX_IDLE_LOOPS=$(( (IDLE_MINUTES * 60) / POLL_INTERVAL ))
 
 # 1. Standalone I2C & Module Probe Engine
 auto_probe_hardware() {
@@ -282,7 +279,6 @@ get_degraded_drives() {
 }
 
 declare -A PREV_IO
-declare -A IDLE_COUNTERS
 declare -A PREV_SLOT_PRIORITY
 
 build_slot_map
@@ -328,16 +324,9 @@ while true; do
         curr_io=$((r_sec + w_sec))
 
         prev_io="${PREV_IO[$dev]:-0}"
-        idle_cnt="${IDLE_COUNTERS[$dev]:-0}"
 
         is_active=0
-        if [ "$curr_io" -gt "$prev_io" ] && [ "$prev_io" -ne 0 ]; then
-            IDLE_COUNTERS[$dev]=0
-            is_active=1
-        else
-            idle_cnt=$((idle_cnt + 1))
-            IDLE_COUNTERS[$dev]="$idle_cnt"
-        fi
+        [ "$curr_io" -gt "$prev_io" ] && [ "$prev_io" -ne 0 ] && is_active=1
         PREV_IO[$dev]="$curr_io"
 
         cand_priority=0
@@ -363,10 +352,6 @@ while true; do
                 cand_color="$HDD_COLOR"
                 cand_brightness="$BRIGHTNESS_ACTIVE"
                 cand_blink_mode=1
-            elif [ "$idle_cnt" -lt "$MAX_IDLE_LOOPS" ]; then
-                cand_priority=1
-                cand_color="$HDD_COLOR"
-                cand_brightness="$BRIGHTNESS_ACTIVE"
             fi
         fi
 
@@ -378,7 +363,7 @@ while true; do
         fi
 
         if [ "$HDD_LED_DEBUG" -eq 1 ]; then
-            echo "[debug] dev=$dev slot=$slot prev_io=$prev_io curr_io=$curr_io is_active=$is_active idle_cnt=$idle_cnt cand_priority=$cand_priority" >&2
+            echo "[debug] dev=$dev slot=$slot prev_io=$prev_io curr_io=$curr_io is_active=$is_active cand_priority=$cand_priority" >&2
         fi
     done
 
