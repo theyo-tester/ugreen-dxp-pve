@@ -41,6 +41,8 @@ sleep 0.1
 # 5. Apply normalized RGB color from central parser
 if [ -w "${LED_DIR}/color" ]; then
     RGB_VAL=$(parse_color "$NET_COLOR")
+    read -r red green blue <<< "$RGB_VAL"
+    RGB_VAL="$((red * BRIGHTNESS_ACTIVE / 255)) $((green * BRIGHTNESS_ACTIVE / 255)) $((blue * BRIGHTNESS_ACTIVE / 255))"
     echo "$RGB_VAL" > "${LED_DIR}/color" 2>/dev/null || true
 fi
 
